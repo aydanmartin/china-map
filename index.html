@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>China Map — Dark</title>
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.8.0/mapbox-gl.js"></script>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.8.0/mapbox-gl.css" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; }
+
+    body {
+      font-family: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+      background: #0a0a0b;
+      color: #c8c8c8;
+    }
+
+    #map {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+    }
+
+    .controls {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 10;
+    }
+
+    .control-group {
+      background: rgba(12, 12, 13, 0.92);
+      border: 1px solid #252527;
+      padding: 10px 14px;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    .toggle {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toggle input { display: none; }
+
+    .toggle-box {
+      width: 36px;
+      height: 18px;
+      background: #1a1a1c;
+      border: 1px solid #2a2a2c;
+      border-radius: 9px;
+      position: relative;
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .toggle-box::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 12px;
+      height: 12px;
+      background: #404044;
+      border-radius: 50%;
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    .toggle input:checked + .toggle-box {
+      background: #1e3a2f;
+      border-color: #2d5a45;
+    }
+
+    .toggle input:checked + .toggle-box::after {
+      transform: translateX(18px);
+      background: #4a7c5c;
+    }
+
+    .toggle:hover .toggle-box::after { background: #5a5a5e; }
+    .toggle input:checked:hover + .toggle-box::after { background: #5a9c6c; }
+
+    .select-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 6px;
+    }
+
+    .select-row select {
+      background: #1a1a1c;
+      border: 1px solid #2a2a2c;
+      color: #c8c8c8;
+      font-family: inherit;
+      font-size: 11px;
+      padding: 6px 10px;
+      cursor: pointer;
+      min-width: 100px;
+    }
+
+    .expandable-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .expandable-header::before {
+      content: '▶';
+      font-size: 8px;
+      transition: transform 0.2s;
+    }
+
+    .expandable-header.expanded::before {
+      transform: rotate(90deg);
+    }
+
+    .expandable-content {
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 10px;
+      padding-left: 14px;
+      border-left: 1px solid #2a2a2c;
+    }
+
+    .expandable-content.expanded {
+      display: flex;
+    }
+
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #8a8a8f;
+    }
+
+    .slider-row input[type=\"range\"] {
+      flex: 1;
+      accent-color: #b33b3b;
+    }
+
+    .poi-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .poi-btn {
+      background: #111116;
+      border: 1px solid #26262b;
+      color: #c8c8c8;
+      font-family: inherit;
+      font-size: 11px;
+      padding: 6px 10px;
+      text-align: left;
+      cursor: pointer;
+      letter-spacing: 0.03em;
+    }
+
+    .poi-btn:hover {
+      border-color: #3a3a40;
+      background: #15151c;
+    }
+
+    /* ========== VIEW TABS (Map / Slides) — slide system ========== */
+    body.view-map .controls {
+      top: 56px;
+    }
+
+    .view-tabs {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 30;
+      display: flex;
+      justify-content: center;
+      gap: 0;
+      padding: 10px 16px;
+      background: rgba(10, 10, 11, 0.96);
+      border-bottom: 1px solid #252527;
+    }
+
+    .view-tab {
+      font-family: inherit;
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      padding: 10px 32px;
+      background: #111116;
+      border: 1px solid #26262b;
+      color: #8a8a8f;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s, color 0.2s;
+    }
+
+    .view-tab + .view-tab {
+      margin-left: -1px;
+    }
+
+    .view-tab:hover {
+      color: #c8c8c8;
+      border-color: #3a3a40;
+    }
+
+    .view-tab.active {
+      color: #c8c8c8;
+      background: #1e3a2f;
+      border-color: #2d5a45;
+    }
+
+    body.view-slides #map,
+    body.view-slides .controls {
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    /* ========== SLIDE PANEL — presentation deck ========== */
+    .slide-panel {
+      position: fixed;
+      top: 48px;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 25;
+      display: none;
+      flex-direction: column;
+      background: #0a0a0b;
+      color: #c8c8c8;
+    }
+
+    body.view-slides .slide-panel {
+      display: flex;
+    }
+
+    .slide-stage {
+      flex: 1;
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+      position: relative;
+      min-height: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .slide-main {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      max-width: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 0;
+      padding: 6px 0;
+    }
+
+    .slide-main-inner {
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      border: none;
+      background: transparent;
+    }
+
+    .slide-canvas-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      max-width: 100%;
+      max-height: 100%;
+    }
+
+    .slide-canvas-wrap canvas {
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+      border: 1px solid #252527;
+      background: #111116;
+      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.45);
+    }
+
+    .slide-status {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #8a8a8f;
+    }
+
+    .slide-status--error {
+      color: #c45c5c;
+    }
+
+    .slide-counter {
+      position: absolute;
+      top: 10px;
+      right: 14px;
+      z-index: 6;
+      padding: 6px 10px;
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #c8c8c8;
+      background: rgba(12, 12, 13, 0.82);
+      border: 1px solid #26262b;
+    }
+
+    .slide-arrow {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 6;
+      width: 44px;
+      height: 72px;
+      padding: 0;
+      border: 1px solid #26262b;
+      background: rgba(17, 17, 22, 0.9);
+      color: #c8c8c8;
+      font-family: inherit;
+      font-size: 28px;
+      line-height: 1;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s, color 0.2s;
+    }
+
+    .slide-arrow:hover {
+      border-color: #2d5a45;
+      background: #1e3a2f;
+      color: #f0f0f2;
+    }
+
+    .slide-arrow:disabled {
+      opacity: 0.25;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    .slide-arrow--prev { left: 8px; }
+    .slide-arrow--next { right: 8px; }
+
+    .slide-thumbs {
+      flex-shrink: 0;
+      display: flex;
+      gap: 4px;
+      padding: 8px 12px 10px;
+      max-height: 52px;
+      overflow-x: auto;
+      border-top: 1px solid #252527;
+      background: rgba(12, 12, 13, 0.92);
+    }
+
+    .slide-thumb {
+      flex: 0 0 auto;
+      min-width: 44px;
+      padding: 10px 14px;
+      border: 1px solid #26262b;
+      background: #111116;
+      color: #8a8a8f;
+      font-family: inherit;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s, color 0.2s;
+    }
+
+    .slide-thumb:hover {
+      border-color: #3a3a40;
+      color: #c8c8c8;
+    }
+
+    .slide-thumb.active {
+      border-color: #2d5a45;
+      background: #1e3a2f;
+      color: #c8c8c8;
+    }
+
+  </style>
+</head>
+<body class="view-map">
+  <!-- ========== VIEW TABS (Map / Slides) ========== -->
+  <nav class="view-tabs" id="view-tabs" aria-label="Main view">
+    <button type="button" class="view-tab active" data-view="map" id="view-tab-map">Map</button>
+    <button type="button" class="view-tab" data-view="slides" id="view-tab-slides">Slides</button>
+  </nav>
+
+  <div id="map"></div>
+  <div class="controls">
+    <div class="control-group">
+      <label class="toggle">
+        <input type="checkbox" id="satellite-toggle" />
+        <span class="toggle-box"></span>
+        <span>Satellite</span>
+      </label>
+      <div class="select-row" id="satellite-time-row" style="display: none;">
+        <label>Time</label>
+        <select id="satellite-time">
+          <option value="day">Day</option>
+          <option value="night">Night</option>
+        </select>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="terrain-toggle" />
+        <span class="toggle-box"></span>
+        <span>Terrain relief</span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="rivers-toggle" />
+        <span class="toggle-box"></span>
+        <span>Rivers</span>
+      </label>
+    </div>
+    <div class="control-group">
+      <div class="expandable-header expanded" id="place-labels-header">
+        Place labels
+      </div>
+      <div class="expandable-content expanded" id="place-labels-content">
+        <label class="toggle">
+          <input type="checkbox" id="cities-toggle" checked />
+          <span class="toggle-box"></span>
+          <span>Cities</span>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="province-labels-toggle" checked />
+          <span class="toggle-box"></span>
+          <span>Province labels</span>
+        </label>
+      </div>
+    </div>
+    <div class="control-group">
+      <div class="expandable-header expanded" id="poi-header">
+        Points of interest
+      </div>
+      <div class="expandable-content expanded" id="poi-content">
+        <div class="poi-row">
+          <button class="poi-btn" data-poi="beijing">Beijing</button>
+          <button class="poi-btn" data-poi="shanghai">Shanghai</button>
+          <button class="poi-btn" data-poi="shenzhen">Shenzhen</button>
+          <button class="poi-btn" data-poi="chengdu">Chengdu</button>
+          <button class="poi-btn" data-poi="xian">Xi'an</button>
+        </div>
+      </div>
+    </div>
+    <div class="control-group">
+      <label class="toggle">
+        <input type="checkbox" id="population-toggle" />
+        <span class="toggle-box"></span>
+        <span>Population density</span>
+      </label>
+      <div class="slider-row">
+        <span>Intensity</span>
+        <input type="range" id="population-intensity" min="0" max="100" value="60" />
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== SLIDE PANEL (presentation deck) ========== -->
+  <div id="slide-panel" class="slide-panel" aria-hidden="true">
+    <div class="slide-stage">
+      <div class="slide-counter" id="slide-counter" aria-live="polite">—</div>
+      <button type="button" class="slide-arrow slide-arrow--prev" id="slide-prev" aria-label="Previous slide">‹</button>
+      <div class="slide-main">
+        <div class="slide-main-inner" id="slide-content"></div>
+      </div>
+      <button type="button" class="slide-arrow slide-arrow--next" id="slide-next" aria-label="Next slide">›</button>
+    </div>
+    <div class="slide-thumbs" id="slide-thumbs" role="tablist" aria-label="Slide thumbnails"></div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>
+    if (!window.MAPBOX_ACCESS_TOKEN) {
+      document.body.innerHTML =
+        '<p style="font-family:system-ui;padding:2rem;color:#c8c8c8;">Missing config.js — copy config.example.js to config.js and add your Mapbox public token (pk…).</p>';
+      throw new Error('Missing MAPBOX_ACCESS_TOKEN');
+    }
+    mapboxgl.accessToken = window.MAPBOX_ACCESS_TOKEN;
+
+    const DARK_STYLE = 'mapbox://styles/mapbox/dark-v11';
+    const SATELLITE_STYLE = 'mapbox://styles/mapbox/satellite-streets-v12';
+
+    const map = new mapboxgl.Map({
+      container: 'map',
+      style: DARK_STYLE,
+      projection: 'mercator',
+      center: [104.2, 35.9],
+      zoom: 4,
+      attributionControl: false
+    });
+
+    map.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right');
+
+    const chinaOnly = ['==', ['get', 'iso_3166_1'], 'CN'];
+
+    const WORLD_POLYGON = {
+      type: 'Feature',
+      geometry: { type: 'Polygon', coordinates: [[[-180,-85],[-180,85],[180,85],[180,-85],[-180,-85]]] }
+    };
+
+    const SAT_COLORS = { day: 'rgba(0,0,0,0)', night: 'rgba(15,20,50,0.6)' };
+
+    // Base opacity curve for population layer; scaled by intensity slider
+    function populationOpacityExpr(factor) {
+      return [
+        'interpolate', ['linear'], ['zoom'],
+        4, 0.12 * factor,
+        6, 0.20 * factor,
+        8, 0.30 * factor,
+        10, 0.45 * factor,
+        12, 0.60 * factor
+      ];
+    }
+
+    const POIS = {
+      beijing:   { center: [116.4074, 39.9042], zoom: 8.5 },
+      shanghai:  { center: [121.4737, 31.2304], zoom: 8.5 },
+      shenzhen:  { center: [114.0579, 22.5431], zoom: 9 },
+      chengdu:   { center: [104.0665, 30.5723], zoom: 8.5 },
+      xian:      { center: [108.9398, 34.3416], zoom: 8.5 }
+    };
+
+    // Only these cities appear when the Cities label toggle is on
+    const CUSTOM_CITIES = {
+      type: 'FeatureCollection',
+      features: [
+        { type: 'Feature', properties: { name: 'Beijing' }, geometry: { type: 'Point', coordinates: [116.4074, 39.9042] } },
+        { type: 'Feature', properties: { name: 'Harbin' }, geometry: { type: 'Point', coordinates: [126.5358, 45.8038] } },
+        { type: 'Feature', properties: { name: 'Qingdao' }, geometry: { type: 'Point', coordinates: [120.3826, 36.0671] } },
+        { type: 'Feature', properties: { name: "Xi'an" }, geometry: { type: 'Point', coordinates: [108.9398, 34.3416] } },
+        { type: 'Feature', properties: { name: 'Zhengzhou' }, geometry: { type: 'Point', coordinates: [113.6254, 34.7466] } },
+        { type: 'Feature', properties: { name: 'Wuhan' }, geometry: { type: 'Point', coordinates: [114.3055, 30.5928] } },
+        { type: 'Feature', properties: { name: 'Chengdu' }, geometry: { type: 'Point', coordinates: [104.0665, 30.5723] } },
+        { type: 'Feature', properties: { name: 'Chongqing' }, geometry: { type: 'Point', coordinates: [106.5516, 29.5630] } },
+        { type: 'Feature', properties: { name: 'Lhasa' }, geometry: { type: 'Point', coordinates: [91.1409, 29.6456] } },
+        { type: 'Feature', properties: { name: 'Nanjing' }, geometry: { type: 'Point', coordinates: [118.7969, 32.0603] } },
+        { type: 'Feature', properties: { name: 'Hangzhou' }, geometry: { type: 'Point', coordinates: [120.1551, 30.2741] } },
+        { type: 'Feature', properties: { name: 'Shanghai' }, geometry: { type: 'Point', coordinates: [121.4737, 31.2304] } },
+        { type: 'Feature', properties: { name: 'Xiamen' }, geometry: { type: 'Point', coordinates: [118.0894, 24.4798] } },
+        { type: 'Feature', properties: { name: 'Guangzhou' }, geometry: { type: 'Point', coordinates: [113.2644, 23.1291] } },
+        { type: 'Feature', properties: { name: 'Shenzhen' }, geometry: { type: 'Point', coordinates: [114.0579, 22.5431] } },
+        { type: 'Feature', properties: { name: 'Hong Kong' }, geometry: { type: 'Point', coordinates: [114.1694, 22.3193] } }
+      ]
+    };
+
+    // --- Satellite helpers ---
+
+    function hideRoadLayers() {
+      if (!document.getElementById('satellite-toggle').checked) return;
+      (map.getStyle()?.layers || []).forEach(layer => {
+        const id = layer.id;
+        if (id.includes('road') || id.includes('bridge') || id.includes('tunnel') ||
+            id === 'aerialway' || id.includes('path-pedestrian') ||
+            id.includes('ferry-aerialway') || id.includes('road-exit')) {
+          if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
+        }
+      });
+    }
+
+    function addSatelliteOverlay() {
+      if (map.getSource('satellite-time-overlay')) return;
+      try {
+        map.addSource('satellite-time-overlay', { type: 'geojson', data: WORLD_POLYGON });
+        const time = document.getElementById('satellite-time').value;
+        const beforeId = map.getLayer('tunnel-minor-case') ? 'tunnel-minor-case' : undefined;
+        map.addLayer({
+          id: 'satellite-time-overlay',
+          type: 'fill',
+          source: 'satellite-time-overlay',
+          paint: { 'fill-color': SAT_COLORS[time] || SAT_COLORS.day, 'fill-opacity': 1 }
+        }, beforeId);
+      } catch (e) {}
+    }
+
+    function updateSatelliteOverlay() {
+      if (map.getLayer('satellite-time-overlay')) {
+        const time = document.getElementById('satellite-time').value;
+        map.setPaintProperty('satellite-time-overlay', 'fill-color', SAT_COLORS[time] || SAT_COLORS.day);
+      }
+    }
+
+    // --- Terrain relief (2D hillshade) ---
+
+    function hillshadePaint() {
+      const satellite = document.getElementById('satellite-toggle').checked;
+      if (satellite) {
+        return {
+          'hillshade-exaggeration': 0.4,
+          'hillshade-shadow-color': 'rgba(0, 0, 0, 0.35)',
+          'hillshade-highlight-color': 'rgba(255, 255, 255, 0.25)',
+          'hillshade-accent-color': 'rgba(60, 60, 70, 0.2)',
+          'hillshade-illumination-direction': 335
+        };
+      }
+      return {
+        'hillshade-exaggeration': 0.8,
+        'hillshade-shadow-color': '#060608',
+        'hillshade-highlight-color': '#6a6a78',
+        'hillshade-accent-color': '#34343e',
+        'hillshade-illumination-direction': 335
+      };
+    }
+
+    function ensureTerrainLayer() {
+      if (!map.getSource('mapbox-dem')) {
+        map.addSource('mapbox-dem', {
+          type: 'raster-dem',
+          url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+          tileSize: 512,
+          maxzoom: 14
+        });
+      }
+      if (!map.getLayer('hillshade')) {
+        const beforeId =
+          map.getLayer('settlement-minor-label') ? 'settlement-minor-label' :
+          map.getLayer('waterway-label') ? 'waterway-label' : undefined;
+        map.addLayer({
+          id: 'hillshade',
+          type: 'hillshade',
+          source: 'mapbox-dem',
+          paint: hillshadePaint()
+        }, beforeId);
+      }
+      applyTerrainLayer();
+    }
+
+    function applyTerrainLayer() {
+      if (!map.getLayer('hillshade')) return;
+      const on = document.getElementById('terrain-toggle').checked;
+      Object.entries(hillshadePaint()).forEach(([key, value]) => {
+        map.setPaintProperty('hillshade', key, value);
+      });
+      map.setLayoutProperty('hillshade', 'visibility', on ? 'visible' : 'none');
+    }
+
+    // --- Rivers / water emphasis ---
+
+    const savedWaterPaint = {};
+    const savedWaterLayout = {};
+
+    function saveWaterLayerDefaults(layerId) {
+      if (savedWaterPaint[layerId] !== undefined) return;
+      const layer = map.getStyle().layers.find(l => l.id === layerId);
+      if (!layer) return;
+      savedWaterPaint[layerId] = layer.paint ? JSON.parse(JSON.stringify(layer.paint)) : {};
+      savedWaterLayout[layerId] = layer.layout ? JSON.parse(JSON.stringify(layer.layout)) : {};
+    }
+
+    function riversEmphasisPaint(layerId) {
+      const satellite = document.getElementById('satellite-toggle').checked;
+      if (layerId === 'water') {
+        return satellite
+          ? { 'fill-color': 'rgba(25, 90, 160, 0.42)' }
+          : { 'fill-color': 'hsl(205, 50%, 26%)' };
+      }
+      if (layerId === 'waterway') {
+        return satellite
+          ? {
+              'line-color': 'rgba(70, 155, 235, 0.85)',
+              'line-opacity': 1,
+              'line-width': [
+                'interpolate', ['exponential', 1.3], ['zoom'],
+                4, 0.5, 7, 1, 10, 2, 14, 4, 18, 6
+              ]
+            }
+          : {
+              'line-color': 'hsl(198, 72%, 55%)',
+              'line-opacity': 1,
+              'line-width': [
+                'interpolate', ['exponential', 1.3], ['zoom'],
+                4, 0.5, 7, 1, 10, 2, 14, 4, 18, 6
+              ]
+            };
+      }
+      return {};
+    }
+
+    function applyRiversLayer() {
+      const on = document.getElementById('rivers-toggle').checked;
+      ['water', 'waterway'].forEach(id => {
+        if (!map.getLayer(id)) return;
+        saveWaterLayerDefaults(id);
+        const paint = on ? riversEmphasisPaint(id) : savedWaterPaint[id];
+        Object.entries(paint).forEach(([key, value]) => {
+          map.setPaintProperty(id, key, value);
+        });
+      });
+
+      if (map.getLayer('waterway-label')) {
+        saveWaterLayerDefaults('waterway-label');
+        map.setLayoutProperty(
+          'waterway-label',
+          'visibility',
+          on ? 'visible' : (savedWaterLayout['waterway-label']?.visibility || 'visible')
+        );
+        if (on) {
+          map.setPaintProperty('waterway-label', 'text-color', '#7ec8e8');
+          map.setPaintProperty('waterway-label', 'text-halo-color', 'rgba(0, 0, 0, 0.85)');
+          map.setPaintProperty('waterway-label', 'text-halo-width', 1.2);
+        } else if (savedWaterPaint['waterway-label']) {
+          const p = savedWaterPaint['waterway-label'];
+          if (p['text-color'] !== undefined) map.setPaintProperty('waterway-label', 'text-color', p['text-color']);
+          if (p['text-halo-color'] !== undefined) map.setPaintProperty('waterway-label', 'text-halo-color', p['text-halo-color']);
+          if (p['text-halo-width'] !== undefined) map.setPaintProperty('waterway-label', 'text-halo-width', p['text-halo-width']);
+        }
+      }
+    }
+
+    // --- Population density layer ---
+
+    function ensurePopulationLayer() {
+      const slider = document.getElementById('population-intensity');
+      // Map 0–100 slider to 0–2.5 factor for a much higher max intensity
+      const factor = slider ? Number(slider.value || 60) / 40 : 1.5;
+
+      if (!map.getSource('population-points')) {
+        map.addSource('population-points', {
+          type: 'geojson',
+          data: 'population_points_simplified.geojson'
+        });
+      }
+      if (!map.getLayer('population-heat')) {
+        const beforeId =
+          map.getLayer('settlement-major-label') ? 'settlement-major-label' :
+          map.getLayer('state-label') ? 'state-label' : undefined;
+        map.addLayer({
+          id: 'population-heat',
+          type: 'circle',
+          source: 'population-points',
+          paint: {
+            'circle-radius': [
+              'interpolate', ['linear'], ['zoom'],
+              4, 0.6,
+              6, 1.2,
+              8, 2.4,
+              10, 4.0,
+              12, 6.0
+            ],
+            'circle-color': [
+              'interpolate', ['linear'], ['get', 'pop'],
+              1,   '#ffffb2',  // pale yellow
+              50,  '#fecc5c',  // yellow-orange
+              200, '#fd8d3c',  // orange
+              800, '#e31a1c'   // strong red
+            ],
+            'circle-opacity': populationOpacityExpr(factor)
+          }
+        }, beforeId);
+      } else {
+        map.setPaintProperty('population-heat', 'circle-opacity', populationOpacityExpr(factor));
+      }
+    }
+
+    // --- Place label controls ---
+    // Save each layer's original filter so we can merge with China restriction
+    const savedFilters = {};
+
+    function saveOriginalFilter(layerId) {
+      if (savedFilters[layerId] !== undefined) return;
+      const layer = map.getStyle().layers.find(l => l.id === layerId);
+      savedFilters[layerId] = layer?.filter || null;
+    }
+
+    function chinaRestrictedFilter(layerId) {
+      const orig = savedFilters[layerId];
+      if (!orig) return chinaOnly;
+      return ['all', orig, chinaOnly];
+    }
+
+    function hideMapboxCityLabels() {
+      (map.getStyle()?.layers || []).forEach(layer => {
+        if (/settlement.*label/i.test(layer.id) && map.getLayer(layer.id)) {
+          map.setLayoutProperty(layer.id, 'visibility', 'none');
+        }
+      });
+    }
+
+    function ensureCustomCityLabels() {
+      if (!map.getSource('custom-cities')) {
+        map.addSource('custom-cities', { type: 'geojson', data: CUSTOM_CITIES });
+      }
+      if (!map.getLayer('custom-cities-label')) {
+        map.addLayer({
+          id: 'custom-cities-label',
+          type: 'symbol',
+          source: 'custom-cities',
+          layout: {
+            'text-field': ['get', 'name'],
+            'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
+            'text-size': ['interpolate', ['linear'], ['zoom'], 4, 12, 8, 15, 12, 18],
+            'text-anchor': 'center',
+            'text-allow-overlap': true,
+            'text-ignore-placement': true
+          },
+          paint: {
+            'text-color': '#ffffff',
+            'text-halo-color': 'hsl(0, 0%, 3%)',
+            'text-halo-width': 1.25,
+            'text-halo-blur': 1
+          }
+        });
+      }
+      if (map.getLayer('custom-cities-label')) {
+        map.moveLayer('custom-cities-label');
+      }
+    }
+
+    function applyProvinceLabelStyle() {
+      if (!map.getLayer('state-label')) return;
+      map.setPaintProperty('state-label', 'text-color', '#f0f0f0');
+      map.setPaintProperty('state-label', 'text-opacity', 1);
+      map.setPaintProperty('state-label', 'text-halo-color', 'hsl(0, 0%, 3%)');
+      map.setPaintProperty('state-label', 'text-halo-width', 1.25);
+    }
+
+    function applyPlaceLabelFilters() {
+      const citiesOn = document.getElementById('cities-toggle').checked;
+      const provincesOn = document.getElementById('province-labels-toggle').checked;
+
+      // Hide all Mapbox settlement labels; show our fixed city list instead
+      hideMapboxCityLabels();
+      ensureCustomCityLabels();
+      if (map.getLayer('custom-cities-label')) {
+        map.setLayoutProperty('custom-cities-label', 'visibility', citiesOn ? 'visible' : 'none');
+      }
+
+      // Province labels: save original, restrict to China, toggle visibility
+      if (map.getLayer('state-label')) {
+        saveOriginalFilter('state-label');
+        map.setFilter('state-label', chinaRestrictedFilter('state-label'));
+        map.setLayoutProperty('state-label', 'visibility', provincesOn ? 'visible' : 'none');
+        applyProvinceLabelStyle();
+      }
+
+      // Always hide country label and continent label
+      ['country-label', 'continent-label'].forEach(id => {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
+      });
+    }
+
+    // --- Master style.load handler ---
+
+    function applyStyleFilters() {
+      // Reset saved filters on style change
+      Object.keys(savedFilters).forEach(k => delete savedFilters[k]);
+      Object.keys(savedWaterPaint).forEach(k => delete savedWaterPaint[k]);
+      Object.keys(savedWaterLayout).forEach(k => delete savedWaterLayout[k]);
+
+      applyPlaceLabelFilters();
+
+      // Province borders: only admin_level 1 inside China
+      ['admin-1-boundary', 'admin-1-boundary-bg'].forEach(id => {
+        if (map.getLayer(id)) {
+          saveOriginalFilter(id);
+          const orig = savedFilters[id];
+          const combined = orig ? ['all', orig, chinaOnly] : chinaOnly;
+          map.setFilter(id, combined);
+        }
+      });
+
+      ensureTerrainLayer();
+      applyRiversLayer();
+
+      if (document.getElementById('satellite-toggle').checked) {
+        addSatelliteOverlay();
+        hideRoadLayers();
+      }
+
+      if (document.getElementById('population-toggle').checked) {
+        ensurePopulationLayer();
+      }
+    }
+
+    map.on('style.load', applyStyleFilters);
+
+    // --- UI wiring ---
+
+    document.getElementById('satellite-toggle').addEventListener('change', (e) => {
+      document.getElementById('satellite-time-row').style.display = e.target.checked ? 'flex' : 'none';
+      map.setStyle(e.target.checked ? SATELLITE_STYLE : DARK_STYLE);
+    });
+
+    document.getElementById('terrain-toggle').addEventListener('change', applyTerrainLayer);
+    document.getElementById('rivers-toggle').addEventListener('change', applyRiversLayer);
+
+    document.getElementById('satellite-time').addEventListener('change', updateSatelliteOverlay);
+
+    document.getElementById('place-labels-header').addEventListener('click', () => {
+      document.getElementById('place-labels-content').classList.toggle('expanded');
+      document.getElementById('place-labels-header').classList.toggle('expanded');
+    });
+
+    document.getElementById('poi-header').addEventListener('click', () => {
+      document.getElementById('poi-content').classList.toggle('expanded');
+      document.getElementById('poi-header').classList.toggle('expanded');
+    });
+
+    document.getElementById('cities-toggle').addEventListener('change', applyPlaceLabelFilters);
+    document.getElementById('province-labels-toggle').addEventListener('change', applyPlaceLabelFilters);
+
+    // POI fly-to behavior
+    document.querySelectorAll('.poi-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.getAttribute('data-poi');
+        const cfg = POIS[key];
+        if (!cfg) return;
+        map.flyTo({
+          center: cfg.center,
+          zoom: cfg.zoom,
+          speed: 0.6,
+          curve: 1.4,
+          essential: true
+        });
+      });
+    });
+
+    document.getElementById('population-toggle').addEventListener('change', (e) => {
+      if (e.target.checked) {
+        ensurePopulationLayer();
+      } else if (map.getLayer('population-heat')) {
+        map.removeLayer('population-heat');
+      }
+    });
+
+    document.getElementById('population-intensity').addEventListener('input', (e) => {
+      if (!map.getLayer('population-heat')) return;
+      const factor = Number(e.target.value || 60) / 40;
+      map.setPaintProperty('population-heat', 'circle-opacity', populationOpacityExpr(factor));
+    });
+
+    // =========================================================================
+    // SLIDE SYSTEM — slides/slides.pdf (does not modify map logic above)
+    // =========================================================================
+
+    const SLIDES_PDF_URL = 'slides/slides.pdf';
+    // Render extra pixels for Retina / HiDPI (sharper text and images)
+    const PDF_OUTPUT_DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    let pdfDoc = null;
+    let pdfPageCount = 0;
+    let slideIndex = 0;
+    let slideRenderToken = 0;
+    let pdfLoadPromise = null;
+
+    const slidePanelEl = document.getElementById('slide-panel');
+    const slideMainEl = document.querySelector('.slide-main');
+    const slideContentEl = document.getElementById('slide-content');
+    const slideCounterEl = document.getElementById('slide-counter');
+    const slideThumbsEl = document.getElementById('slide-thumbs');
+    const slidePrevBtn = document.getElementById('slide-prev');
+    const slideNextBtn = document.getElementById('slide-next');
+    const viewTabMap = document.getElementById('view-tab-map');
+    const viewTabSlides = document.getElementById('view-tab-slides');
+
+    function loadSlidesPdf() {
+      if (!pdfLoadPromise) {
+        pdfLoadPromise = pdfjsLib.getDocument(SLIDES_PDF_URL).promise
+          .then((doc) => {
+            pdfDoc = doc;
+            pdfPageCount = doc.numPages;
+            return doc;
+          });
+      }
+      return pdfLoadPromise;
+    }
+
+    function slideDisplayScale(page) {
+      const base = page.getViewport({ scale: 1 });
+      const rect = slideContentEl.getBoundingClientRect();
+      const maxW = Math.max(rect.width, 320);
+      const maxH = Math.max(rect.height, 240);
+      return Math.min(maxW / base.width, maxH / base.height);
+    }
+
+    async function renderPdfPageToCanvas(page, displayScale) {
+      const dpr = PDF_OUTPUT_DPR;
+      const renderScale = displayScale * dpr;
+      const viewport = page.getViewport({ scale: renderScale });
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      canvas.style.width = Math.floor(viewport.width / dpr) + 'px';
+      canvas.style.height = Math.floor(viewport.height / dpr) + 'px';
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      return canvas;
+    }
+
+    function showSlideStatus(message, isError) {
+      slideContentEl.innerHTML =
+        '<p class="slide-status' + (isError ? ' slide-status--error' : '') + '">' + message + '</p>';
+    }
+
+    function updateSlideChrome(index, total) {
+      slideCounterEl.textContent = (index + 1) + ' / ' + total;
+      slidePrevBtn.disabled = index <= 0;
+      slideNextBtn.disabled = index >= total - 1;
+
+      slideThumbsEl.querySelectorAll('.slide-thumb').forEach((btn, i) => {
+        btn.classList.toggle('active', i === index);
+        btn.setAttribute('aria-selected', i === index ? 'true' : 'false');
+      });
+
+      const activeThumb = slideThumbsEl.querySelector('.slide-thumb.active');
+      if (activeThumb) {
+        activeThumb.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+      }
+    }
+
+    function buildSlideThumbnails() {
+      slideThumbsEl.innerHTML = '';
+      for (let i = 0; i < pdfPageCount; i++) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'slide-thumb' + (i === 0 ? ' active' : '');
+        btn.setAttribute('role', 'tab');
+        btn.setAttribute('aria-selected', i === 0 ? 'true' : 'false');
+        btn.setAttribute('aria-label', 'Slide ' + (i + 1));
+        btn.textContent = String(i + 1);
+        btn.addEventListener('click', () => renderSlide(i));
+        slideThumbsEl.appendChild(btn);
+      }
+    }
+
+    async function renderSlide(index) {
+      const token = ++slideRenderToken;
+      slideIndex = index;
+      showSlideStatus('Loading slide…', false);
+      slidePrevBtn.disabled = true;
+      slideNextBtn.disabled = true;
+
+      try {
+        await loadSlidesPdf();
+        if (token !== slideRenderToken) return;
+
+        const total = pdfPageCount;
+        if (index < 0 || index >= total) return;
+
+        const page = await pdfDoc.getPage(index + 1);
+        if (token !== slideRenderToken) return;
+
+        const displayScale = slideDisplayScale(page);
+        const canvas = await renderPdfPageToCanvas(page, displayScale);
+        if (token !== slideRenderToken) return;
+
+        const wrap = document.createElement('div');
+        wrap.className = 'slide-canvas-wrap';
+        wrap.appendChild(canvas);
+        slideContentEl.innerHTML = '';
+        slideContentEl.appendChild(wrap);
+        updateSlideChrome(index, total);
+      } catch (err) {
+        console.error('Slide PDF error:', err);
+        if (token !== slideRenderToken) return;
+        showSlideStatus('Could not load slides.pdf', true);
+        slideCounterEl.textContent = '—';
+      }
+    }
+
+    function setActiveView(view) {
+      const isSlides = view === 'slides';
+      document.body.classList.toggle('view-map', !isSlides);
+      document.body.classList.toggle('view-slides', isSlides);
+      viewTabMap.classList.toggle('active', !isSlides);
+      viewTabSlides.classList.toggle('active', isSlides);
+      slidePanelEl.setAttribute('aria-hidden', isSlides ? 'false' : 'true');
+      if (isSlides) {
+        requestAnimationFrame(() => {
+          map.resize();
+          renderSlide(slideIndex);
+        });
+      }
+    }
+
+    function goToPrevSlide() {
+      if (slideIndex > 0) renderSlide(slideIndex - 1);
+    }
+
+    function goToNextSlide() {
+      if (pdfPageCount && slideIndex < pdfPageCount - 1) renderSlide(slideIndex + 1);
+    }
+
+    viewTabMap.addEventListener('click', () => setActiveView('map'));
+    viewTabSlides.addEventListener('click', () => setActiveView('slides'));
+    slidePrevBtn.addEventListener('click', goToPrevSlide);
+    slideNextBtn.addEventListener('click', goToNextSlide);
+
+    document.addEventListener('keydown', (e) => {
+      if (!document.body.classList.contains('view-slides')) return;
+      if (e.key === 'ArrowLeft') goToPrevSlide();
+      if (e.key === 'ArrowRight') goToNextSlide();
+    });
+
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+      if (!document.body.classList.contains('view-slides')) return;
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => renderSlide(slideIndex), 150);
+    });
+
+    loadSlidesPdf()
+      .then(() => {
+        buildSlideThumbnails();
+        slideCounterEl.textContent = '1 / ' + pdfPageCount;
+        slidePrevBtn.disabled = true;
+        slideNextBtn.disabled = pdfPageCount <= 1;
+      })
+      .catch((err) => {
+        console.error('Slide PDF preload error:', err);
+        showSlideStatus('Could not load slides.pdf', true);
+      });
+
+    setActiveView('map');
+
+  </script>
+</body>
+</html>
